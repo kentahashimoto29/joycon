@@ -1,26 +1,86 @@
 #define JOYCON_L_PRODUCT_ID 8198
 #define JOYCON_R_PRODUCT_ID 8199
-#include "hidapi/hidapi.h"
+#include "hidapi\hidapi.h"
 
 #include <stdio.h>
+#include <stdint.h>
+#include <string.h>
 
-void main(void)
+void SendSubcommand(hid_device* dev, uint8_t command, uint8_t data[], int len, int* globalCount) {
+    uint8_t buf[0x40]; memset(buf, 0x0, size_t(0x40));
+
+    buf[0] = 1; // 0x10 for rumble only
+    buf[1] = *globalCount; // Increment by 1 for each packet sent. It loops in 0x0 - 0xF range.
+
+    if (*globalCount == 0xf0) {
+        *globalCount = 0x00;
+    }
+    else {
+        *globalCount++;
+    }
+
+    buf[10] = command;
+    memcpy(buf + 11, data, len);
+
+    hid_write(dev, buf, 0x40);
+}
+
+int main()
 {
-	// 接続されているHIDデバイスの連結リストを取得。
-	hid_device_info *device = hid_enumerate(0, 0);
+    int globalCount = 0;
+    // 接続されているHIDデバイスの連結リストを取得。
+    hid_device_info* device = hid_enumerate(0, 0);
 
-	while (device)
-	{
-		// プロダクトID等を指定して、HID deviceをopenする。そうすると、そのhidデバイスの情報が載ったhid_deviceが帰ってくる。
-		hid_device *dev = hid_open(device->vendor_id, device->product_id, device->serial_number);
-		// 今開いているデバイスのプロダクト名の取得。
-		printf("\nproduct_id: %ls", device->product_string);
-		// 次のデバイスへ。　　
-		device = device->next;
-	}
+    while (device)
+    {
+        if (device->product_id == JOYCON_L_PRODUCT_ID || device->product_id == JOYCON_R_PRODUCT_ID)
+        {
+            // プロダクトID等を指定して、HID deviceをopenする。そうすると、そのhidデバイスの情報が載ったhid_deviceが帰ってくる。
+            hid_device* dev = hid_open(device->vendor_id, device->product_id, device->serial_number);
+            // 今開いているデバイスのプロダクト名の取得。
+            printf("\nproduct_id: %ls", device->product_string);
 
-	int a;
-	scanf("%d", &a);
+            uint8_t data[0x01];
 
-	hid_free_enumeration(device);
+            data[0] = 0x01;
+            // 0x03番のサブコマンドに、0x01を送信します。
+            // ランプはビットフラグで、4桁。ランプの一番上から10進数で 1, 2, 4, 8 と対応しています。
+            SendSubcommand(dev, 0x30, data, 1, &globalCount);
+
+            //            read input report
+            uint8_t buff[0x40]; memset(buff, 0x40, size_t(0x40));
+            // 読み込むサイズを指定。
+            size_t size = 49;
+            // buff に input report が入る。
+            int ret = hid_read(dev, buff, size);
+            printf("\ninput report id: %d\n", *buff);
+            // ボタンの押し込みがビットフラグで表現されている。
+            printf("input report id: %d\n", buff[5]);
+
+            while (true)
+            {
+                // input report を受けとる。
+                int ret = hid_read(dev, buff, size);
+                // input report の id が 0x3F のものに絞る。
+                if (*buff != 0x3F)
+                {
+                    continue;
+                }
+                // input report の id　を表示。
+                printf("\ninput report id: %d\n", *buff);
+                // ボタンのビットビットフィールドを表示。
+                printf("button byte 1: %d\n", buff[1]);
+                printf("button byte 2: %d\n", buff[1]);
+                // スティックの状態を表示。
+                printf("stick  byte 3: %d\n", buff[3]);
+
+                data[0] = buff[3];
+
+                SendSubcommand(dev, 0x30, data, 1, &globalCount);
+            }
+        }
+        // 次のデバイスへ。　　
+        device = device->next;
+    }
+    hid_free_enumeration(device);
 }
