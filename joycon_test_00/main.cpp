@@ -6,7 +6,56 @@
 #include <stdint.h>
 #include <string.h>
 
-void SendSubcommand(hid_device* dev, uint8_t command, uint8_t data[], int len, int* globalCount) {
+// 説明
+// windowsでは“Wireless Gamepad”と認識されます。
+// ランプはビットフラグで、4桁。ランプの一番上から10進数で 1, 2, 4, 8 と対応しています。
+
+namespace
+{
+    //===============================
+    // ボタン
+    //===============================
+    enum JOYCON_BUTTON
+    {
+        Y = 0x01,   //1
+        X = 0x02,   //2
+        B = 0x04,   //4
+        A = 0x08,   //8
+        SR = 0x10,  //16
+        SL = 0x20,  //32
+        //R = 0x40,   //64
+        //ZR = 0x80,  //128
+    };
+
+    //===============================
+    // 特殊ボタン (左右合一ボタン)
+    //===============================
+    enum JOYCON_BUTTON_SP
+    {
+        MINUS = 0x01,   //1
+        PLUS = 0x02,   //2
+        STICK_L = 0x04,   //4
+        STICK_R = 0x08,   //8
+        HOME = 0x10,  //16
+        PHOTO = 0x20,  //32
+        R = 0x40,   //64
+        ZR = 0x80,  //128
+    };
+
+    //===============================
+    //スティック
+    //===============================
+    enum JOYCON_STICK
+    {
+
+    };
+}
+
+//====================================
+// Joyconに出力
+//====================================
+void SendSubcommand(hid_device* dev, uint8_t command, uint8_t data[], int len, int* globalCount)
+{
     uint8_t buf[0x40]; memset(buf, 0x0, size_t(0x40));
 
     buf[0] = 1; // 0x10 for rumble only
@@ -25,6 +74,9 @@ void SendSubcommand(hid_device* dev, uint8_t command, uint8_t data[], int len, i
     hid_write(dev, buf, 0x40);
 }
 
+//====================================
+// メイン関数
+//====================================
 int main()
 {
     int globalCount = 0;
@@ -44,10 +96,9 @@ int main()
 
             data[0] = 0x01;
             // 0x03番のサブコマンドに、0x01を送信します。
-            // ランプはビットフラグで、4桁。ランプの一番上から10進数で 1, 2, 4, 8 と対応しています。
             SendSubcommand(dev, 0x30, data, 1, &globalCount);
 
-            //            read input report
+            // read input report
             uint8_t buff[0x40]; memset(buff, 0x40, size_t(0x40));
             // 読み込むサイズを指定。
             size_t size = 49;
@@ -57,6 +108,7 @@ int main()
             // ボタンの押し込みがビットフラグで表現されている。
             printf("input report id: %d\n", buff[5]);
 
+            //対象デバイスの状態を取得し続ける
             while (true)
             {
                 // input report を受けとる。
@@ -66,11 +118,12 @@ int main()
                 {
                     continue;
                 }
+
                 // input report の id　を表示。
                 printf("\ninput report id: %d\n", *buff);
-                // ボタンのビットビットフィールドを表示。
+                // ボタンのビットフィールドを表示。
                 printf("button byte 1: %d\n", buff[1]);
-                printf("button byte 2: %d\n", buff[1]);
+                printf("button byte 2: %d\n", buff[2]);
                 // スティックの状態を表示。
                 printf("stick  byte 3: %d\n", buff[3]);
 
