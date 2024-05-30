@@ -1,8 +1,10 @@
 #include "hidapi\hidapi.h"
 
+#include <iostream>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <vector>
 
 // 説明
 // windowsでは“Wireless Gamepad”と認識されます。
@@ -66,7 +68,16 @@ namespace
     //===============================
     enum JOYCON_STICK
     {
-
+        JOYSTICK_U = 0,
+        JOYSTICK_UR,
+        JOYSTICK_R,
+        JOYSTICK_DR,
+        JOYSTICK_D,
+        JOYSTICK_DL,
+        JOYSTICK_L,
+        JOYSTICK_UL,
+        JOYSTICK_NUT,
+        JOYSTICK_MAX,
     };
 }
 
@@ -92,6 +103,131 @@ void SendSubcommand(hid_device* dev, uint8_t command, uint8_t data[], int len, i
 
     hid_write(dev, buf, 0x40);
 }
+
+//====================================
+// 初期化
+//====================================
+void initialize_hidapi() {
+    if (hid_init()) {
+        std::cerr << "Failed to initialize HIDAPI." << std::endl;
+        exit(-1);
+    }
+}
+
+//====================================
+// 見つけて接続します
+//====================================
+hid_device* open_joycon() {
+    //struct hid_device_info* devs = hid_enumerate(0x057e, 0x2006); // Joy-ConのベンダーIDとプロダクトID
+    struct hid_device_info* devs = hid_enumerate(0, 0); // Joy-ConのベンダーIDとプロダクトID
+    hid_device* handle = nullptr;
+
+    while (true)
+    {
+        if (devs) {
+            handle = hid_open(0x057e, 0x2006, NULL);
+            if (!handle) {
+                std::cerr << "Unable to open Joy-Con." << std::endl;
+                exit(-1);
+            }
+        }
+    
+        devs = devs->next;
+    }
+
+    std::cerr << "Joy-Con not found." << std::endl;
+    exit(-1);
+
+    hid_free_enumeration(devs);
+    return handle;
+}
+
+//====================================
+// コマンドを送信
+//====================================
+void send_command(hid_device* handle, const std::vector<uint8_t>& command) {
+    if (hid_write(handle, command.data(), command.size()) == -1) {
+        std::cerr << "Failed to send command to Joy-Con." << std::endl;
+        exit(-1);
+    }
+}
+
+//====================================
+// コマンドを送信
+//====================================
+std::vector<uint8_t> create_command(uint8_t command_id, const std::vector<uint8_t>& data) {
+    std::vector<uint8_t> command(10 + data.size());
+    command[0] = 0x01;
+    command[1] = 0x00;
+    command[2] = 0x00;
+    command[3] = 0x00;
+    command[4] = 0x00;
+    command[5] = 0x00;
+    command[6] = 0x00;
+    command[7] = 0x00;
+    command[8] = command_id;
+    std::copy(data.begin(), data.end(), command.begin() + 9);
+    return command;
+}
+
+//====================================
+// センサーを有効にする
+//====================================
+void enable_sensors(hid_device* handle) {
+    std::vector<uint8_t> enable_sensor_data = { 0x01, 0x40 };
+    std::vector<uint8_t> enable_imu_data = { 0x01, 0x04, 0x01, 0x01 };
+
+    send_command(handle, create_command(0x03, enable_sensor_data));
+    send_command(handle, create_command(0x40, enable_imu_data));
+}
+
+//====================================
+// センサー情報を表示
+//====================================
+void read_sensor_data(hid_device* handle) {
+    unsigned char buffer[49];
+    int res;
+
+    while (true) {
+        res = hid_read(handle, buffer, sizeof(buffer));
+        if (res > 0) {
+            // センサーデータはバッファの18バイト目から始まる
+            int16_t button = static_cast<int>(buffer[1]);
+            int16_t button_sp = static_cast<int>(buffer[2]);
+            int16_t stick = static_cast<int>(buffer[3]);
+
+            int16_t accel_x = (buffer[19] << 8) | buffer[18];
+            int16_t accel_y = (buffer[21] << 8) | buffer[20];
+            int16_t accel_z = (buffer[23] << 8) | buffer[22];
+
+            int16_t gyro_x = (buffer[25] << 8) | buffer[24];
+            int16_t gyro_y = (buffer[27] << 8) | buffer[26];
+            int16_t gyro_z = (buffer[29] << 8) | buffer[28];
+
+            printf("\ninput report id:%d\n" ,*buffer);
+            std::cout << "butNM byte:" << button << std::endl;
+            std::cout << "butSP byte:" << button_sp << std::endl;
+            std::cout << "stick byte:" << stick << std::endl;
+
+            std::cout << "Accel: (" << accel_x << ", " << accel_y << ", " << accel_z << ") " << std::endl;
+            std::cout << "Gyro: (" << gyro_x << ", " << gyro_y << ", " << gyro_z << ")" << std::endl;
+        }
+    }
+}
+
+////====================================
+//// メイン関数
+////====================================
+//int main()
+//{
+//    //Unityから輸入
+//    initialize_hidapi();
+//    hid_device* handle = open_joycon();
+//    enable_sensors(handle);
+//    read_sensor_data(handle);
+//    hid_close(handle);
+//    hid_exit();
+//}
 
 //====================================
 // メイン関数
@@ -121,30 +257,21 @@ int main()
             //hid_set_nonblocking(dev, 1);
 
             // read input report
-            uint8_t buff[0x40]; memset(buff, 0x40, size_t(0x40));
+            uint8_t buff[0x40]; memset(buff, 0x00, size_t(0x40));
             // 読み込むサイズを指定。
-            size_t size = sizeof(buff) / sizeof(int);
+            size_t size = sizeof(buff);
             // buff に input report が入る。
             int ret = hid_read(dev, buff, size);
             printf("\ninput report id: %d\n", *buff);
             // ボタンの押し込みがビットフラグで表現されている。
             printf("input report id: %d\n", buff[5]);
 
-            //レジスター情報
-            uint8_t regiData[0x02];
-
             //対象デバイスの状態を取得し続ける
             while (true)
             {
-                //前回比較対象
-                //hid_device* devNow = hid_open(device->vendor_id, device->product_id, device->serial_number);
-
                 // input report を受けとる。
                 int ret = hid_read(dev, buff, size);
                 
-                memset(regiData, 0, size_t(0x02));
-                SendSubcommand(dev, SUBCMD_IMU_REGI_READ, regiData, 2, &globalCount);
-
                 // input report の id が 0x3F のものに絞る。
                 if (*buff != 0x3F)
                 {
@@ -152,46 +279,24 @@ int main()
                     continue;
                 }
 
-                // input report の id　を表示。
+                // input report の id　を表示
                 printf("\ninput report id: %d\n", *buff);
-                // ボタンのビットフィールドを表示。
+                // ボタンのビットフィールドを表示
                 printf("button byte 1: %d\n", buff[1]);
                 printf("button byte 2: %d\n", buff[2]);
-                // スティックの状態を表示。
+                // スティックの状態を表示
                 printf("stick  byte 3: %d\n", buff[3]);
 
-                //printf("byte 4: %d\n", buff[4]);
-                //printf("byte 5: %d\n", buff[5]);
-                //printf("byte 6: %d\n", buff[6]);
-                //printf("byte 7: %d\n", buff[7]);
-                //printf("byte 8: %d\n", buff[8]);
-                //printf("byte 9: %d\n", buff[9]);
-                //printf("byte 10: %d\n", buff[10]);
-                //printf("byte 11: %d\n", buff[11]);
-                //printf("byte 12: %d\n", buff[12]);
-                //printf("byte 13: %d\n", buff[13]);
-                //printf("byte 14: %d\n", buff[14]);
-                //printf("byte 15: %d\n", buff[15]);
-                //printf("byte 16: %d\n", buff[16]);
-
-                printf("register 0: %d\n", regiData[0]);
-                printf("register 1: %d\n", regiData[1]);
-                
-                //// ジャイロデータの取得
-                //int16_t gyro_x = (buff[19] << 8) | buff[18];
-                //int16_t gyro_y = (buff[21] << 8) | buff[20];
-                //int16_t gyro_z = (buff[23] << 8) | buff[22];
-
-                //// ジャイロデータを出力
-                //printf("Gyro X:%d, Gyro Y: %d, Gyro Z: %d",gyro_x, gyro_y, gyro_z);
-
+                //for (int i = 4; i < 64; i++)
+                //{//探し用表示
+                //    printf("button byte %d: %d\n", i, buff[i]);
+                //}
 
                 data[0] = buff[3];
-
                 SendSubcommand(dev, 0x30, data, 1, &globalCount);
             }
         }
-        // 次のデバイスへ。　　
+         //次のデバイスへ
         device = device->next;
     }
     hid_free_enumeration(device);
