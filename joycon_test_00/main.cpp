@@ -237,6 +237,7 @@ int main()
     int globalCount = 0;
     // 接続されているHIDデバイスの連結リストを取得。
     hid_device_info* device = hid_enumerate(0, 0);
+    uint8_t buffOld[0x40]; memset(buffOld, 0x00, size_t(0x40));
 
     while (device)
     {
@@ -275,7 +276,28 @@ int main()
                 // input report の id が 0x3F のものに絞る。
                 if (*buff != 0x3F)
                 {
-                    printf("\ninput report id: %d\n", *buff);
+                    if (*buff == 0x30)
+                    {
+                        int16_t accel_x = (buff[19] << 8) | buff[18];
+                        int16_t accel_y = (buff[21] << 8) | buff[20];
+                        int16_t accel_z = (buff[23] << 8) | buff[22];
+
+                        int16_t gyro_x = (buff[25] << 8) | buff[24];
+                        int16_t gyro_y = (buff[27] << 8) | buff[26];
+                        int16_t gyro_z = (buff[29] << 8) | buff[28];
+                        std::cout << "Accel: (" << accel_x << ", " << accel_y << ", " << accel_z << ") " << std::endl;
+                        std::cout << "Gyro: (" << gyro_x << ", " << gyro_y << ", " << gyro_z << ")" << std::endl;
+
+                        gyro_x = (buff[19] | (buff[20] << 8) & 0xFF00);
+                        gyro_y = (buff[21] | (buff[22] << 8) & 0xFF00);
+                        gyro_z = (buff[23] | (buff[24] << 8) & 0xFF00);
+                        std::cout << "Gyro: (" << gyro_x << ", " << gyro_y << ", " << gyro_z << ")" << std::endl;
+                    }
+                    else
+                    {
+                        printf("\ninput report id: %d\n", *buff);
+                    }
+                
                     continue;
                 }
 
@@ -287,10 +309,15 @@ int main()
                 // スティックの状態を表示
                 printf("stick  byte 3: %d\n", buff[3]);
 
-                //for (int i = 4; i < 64; i++)
-                //{//探し用表示
-                //    printf("button byte %d: %d\n", i, buff[i]);
-                //}
+                for (int i = 4; i < 64; i++)
+                {//探し用表示
+                    if (buffOld[i] = buff[i])
+                    {
+                        printf("IDX(%d): %d → %d\n", i, buffOld[i], buff[i]);
+                    }
+                }
+                
+                *buffOld = *buff;
 
                 data[0] = buff[3];
                 SendSubcommand(dev, 0x30, data, 1, &globalCount);
