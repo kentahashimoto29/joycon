@@ -258,8 +258,8 @@ int main()
             data[0] = 0x30; //command
             SendSubcommand(dev, 0x03, data, 1, &globalCount);
 
-            data[0] = 0x01; //U“®
-            SendSubcommand(dev, 0x48, data, 1, &globalCount);
+            //data[0] = 0x01; //U“®
+            //SendSubcommand(dev, 0x48, data, 1, &globalCount);
             //hid_set_nonblocking(dev, 1);
 
             // read input report
