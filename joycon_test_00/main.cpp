@@ -253,10 +253,13 @@ int main()
             // 0x03番のサブコマンドに、0x01を送信します。
             data[0] = 0x01; //Report ID
             SendSubcommand(dev, 0x30, data, 1, &globalCount);
-            data[0] = 0x40; //command
+            data[0] = 0x01; //command
             SendSubcommand(dev, 0x40, data, 1, &globalCount);
             data[0] = 0x30; //command
             SendSubcommand(dev, 0x03, data, 1, &globalCount);
+
+            //data[0] = 0x01; //振動
+            //SendSubcommand(dev, 0x48, data, 1, &globalCount);
             //hid_set_nonblocking(dev, 1);
 
             // read input report
@@ -272,16 +275,20 @@ int main()
             //対象デバイスの状態を取得し続ける
             while (true)
             {
+                //data[0] = 0x30; //command
+                //SendSubcommand(dev, 0x03, data, 1, &globalCount);
+
                 // input report を受けとる。
                 int ret = hid_read(dev, buff, size);
                 
                 // input report の id が 0x3F のものに絞る。
                 if (*buff != 0x3F)
                 {
-                    if (*buff == 0x30)
-                    {
-                        printf("\ninput report id: %d\n", *buff);
+                    printf("\ninput report id: %d\n", *buff);
 
+                    if (*buff == 0x21 || *buff == 0x30)
+                    {
+                        printf("button 3: %d\n", buff[3]);
                         int16_t accel_x = (buff[19] << 8) | buff[18];
                         int16_t accel_y = (buff[21] << 8) | buff[20];
                         int16_t accel_z = (buff[23] << 8) | buff[22];
@@ -295,11 +302,21 @@ int main()
                         gyro_x = (buff[19] | (buff[20] << 8) & 0xFF00);
                         gyro_y = (buff[21] | (buff[22] << 8) & 0xFF00);
                         gyro_z = (buff[23] | (buff[24] << 8) & 0xFF00);
-                        std::cout << "Gyro: (" << gyro_x << ", " << gyro_y << ", " << gyro_z << ")" << std::endl;
-                    }
-                    else
-                    {
-                        printf("\ninput report id: %d\n", *buff);
+                        std::cout << "GyroH: (" << gyro_x << ", " << gyro_y << ", " << gyro_z << ")" << std::endl;
+                    
+                        for (int i = 0; i < sizeof(buff); i++)
+                        {//探し用表示
+                            if (buffOld[i] != buff[i])
+                            {
+                                printf("IDX(%d): %d → %d\n", i, buffOld[i], buff[i]);
+                            }
+                            buffOld[i] = buff[i];
+                        }
+
+                        //for (int i = 13; i < 48; i++)
+                        //{//探し用表示
+                        //    printf("IDX(%d): %d → %d\n", i, buffOld[i], buff[i]);
+                        //}
                     }
                 
                     continue;
@@ -313,15 +330,18 @@ int main()
                 // スティックの状態を表示
                 printf("stick  byte 3: %d\n", buff[3]);
 
+                buffOld[1] = buff[1];
+                buffOld[2] = buff[2];
+                buffOld[3] = buff[3];
+
                 for (int i = 4; i < 64; i++)
                 {//探し用表示
-                    if (buffOld[i] = buff[i])
+                    if (buffOld[i] != buff[i])
                     {
                         printf("IDX(%d): %d → %d\n", i, buffOld[i], buff[i]);
                     }
+                    buffOld[i] = buff[i];
                 }
-                
-                *buffOld = *buff;
 
                 data[0] = buff[3];
                 SendSubcommand(dev, 0x30, data, 1, &globalCount);
