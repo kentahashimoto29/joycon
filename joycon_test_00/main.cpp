@@ -255,6 +255,8 @@ int main()
             SendSubcommand(dev, 0x30, data, 1, &globalCount);
             data[0] = 0x40; //command
             SendSubcommand(dev, 0x40, data, 1, &globalCount);
+            data[0] = 0x30; //command
+            SendSubcommand(dev, 0x03, data, 1, &globalCount);
             //hid_set_nonblocking(dev, 1);
 
             // read input report
@@ -278,6 +280,8 @@ int main()
                 {
                     if (*buff == 0x30)
                     {
+                        printf("\ninput report id: %d\n", *buff);
+
                         int16_t accel_x = (buff[19] << 8) | buff[18];
                         int16_t accel_y = (buff[21] << 8) | buff[20];
                         int16_t accel_z = (buff[23] << 8) | buff[22];
