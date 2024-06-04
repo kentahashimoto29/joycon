@@ -253,10 +253,11 @@ int main()
             // 0x03番のサブコマンドに、0x01を送信します。
             data[0] = 0x01; //Report ID
             SendSubcommand(dev, 0x30, data, 1, &globalCount);
-            data[0] = 0x01; //command
-            SendSubcommand(dev, 0x40, data, 1, &globalCount);
             data[0] = 0x30; //command
             SendSubcommand(dev, 0x03, data, 1, &globalCount);
+            data[0] = 0x01; //command
+            SendSubcommand(dev, 0x40, data, 1, &globalCount);
+
 
             //data[0] = 0x01; //振動
             //SendSubcommand(dev, 0x48, data, 1, &globalCount);
@@ -266,11 +267,15 @@ int main()
             uint8_t buff[0x40]; memset(buff, 0x00, size_t(0x40));
             // 読み込むサイズを指定。
             size_t size = sizeof(buff);
+
+
+           
             // buff に input report が入る。
             int ret = hid_read(dev, buff, size);
             printf("\ninput report id: %d\n", *buff);
             // ボタンの押し込みがビットフラグで表現されている。
             printf("input report id: %d\n", buff[5]);
+
 
             //対象デバイスの状態を取得し続ける
             while (true)
@@ -289,20 +294,32 @@ int main()
                     if (*buff == 0x21 || *buff == 0x30)
                     {
                         printf("button 3: %d\n", buff[3]);
-                        int16_t accel_x = (buff[19] << 8) | buff[18];
-                        int16_t accel_y = (buff[21] << 8) | buff[20];
-                        int16_t accel_z = (buff[23] << 8) | buff[22];
 
-                        int16_t gyro_x = (buff[25] << 8) | buff[24];
-                        int16_t gyro_y = (buff[27] << 8) | buff[26];
-                        int16_t gyro_z = (buff[29] << 8) | buff[28];
-                        std::cout << "Accel: (" << accel_x << ", " << accel_y << ", " << accel_z << ") " << std::endl;
-                        std::cout << "Gyro: (" << gyro_x << ", " << gyro_y << ", " << gyro_z << ")" << std::endl;
+                        //加速度を取得
+                        int16_t accel_x = (buff[13] | (buff[14] << 8) & 0xFF00);
+                        int16_t accel_y = (buff[15] | (buff[16] << 8) & 0xFF00);
+                        int16_t accel_z = (buff[17] | (buff[18] << 8) & 0xFF00);
 
-                        gyro_x = (buff[19] | (buff[20] << 8) & 0xFF00);
-                        gyro_y = (buff[21] | (buff[22] << 8) & 0xFF00);
-                        gyro_z = (buff[23] | (buff[24] << 8) & 0xFF00);
-                        std::cout << "GyroH: (" << gyro_x << ", " << gyro_y << ", " << gyro_z << ")" << std::endl;
+                        //加速度を補正
+                        float accel_correction_x = (float)accel_x * 0.000244f;
+                        float accel_correction_y = (float)accel_y * 0.000244f;
+                        float accel_correction_z = (float)accel_z * 0.000244f;
+
+                        std::cout << "Accel: (" << accel_correction_x << ", " << accel_correction_y << ", " << accel_correction_z << ")" << std::endl;
+                        printf("\n");
+
+                        //回転速度を取得
+                        int16_t gyro_x = (buff[19] | (buff[20] << 8) & 0xFF00);
+                        int16_t gyro_y = (buff[21] | (buff[22] << 8) & 0xFF00);
+                        int16_t gyro_z = (buff[23] | (buff[24] << 8) & 0xFF00);
+
+                        //回転速度を補正
+                        float gyro_radian_x = (float)gyro_x * 0.070f;
+                        float gyro_radian_y = (float)gyro_y * 0.070f;
+                        float gyro_radian_z = (float)gyro_z * 0.070f;
+
+                        std::cout << "Gyro: (" << gyro_radian_x << ", " << gyro_radian_y << ", " << gyro_radian_z <<")" << std::endl;
+                        printf("\n");
                     
                         for (int i = 0; i < sizeof(buff); i++)
                         {//探し用表示
@@ -312,11 +329,6 @@ int main()
                             }
                             buffOld[i] = buff[i];
                         }
-
-                        //for (int i = 13; i < 48; i++)
-                        //{//探し用表示
-                        //    printf("IDX(%d): %d → %d\n", i, buffOld[i], buff[i]);
-                        //}
                     }
                 
                     continue;
